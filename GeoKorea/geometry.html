@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Korea Map with D3 v7</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script src="korea.json" type="text/javascript"></script>
+<style>
+svg {
+background-color: #f0f0f0;
+}
+
+.province {
+fill: #83b4d3;
+stroke: #fff;
+stroke-width: 1;
+}
+
+.province:hover {
+fill: #ff0000;
+}
+
+.province.clicked {
+fill: #008000;
+opacity: 0.5;
+}
+
+.province-title {
+font-size: 12px;
+font-weight: bold;
+}
+
+.clicked-square {
+fill: yellow;
+opacity: 0.7;
+}
+</style>
+</head>
+
+<body>
+<svg id="map" width="1000" height="1000"></svg>
+<script>
+
+    const geojson = JSON.parse(JSON.stringify(KoreaMapData));
+
+    //winform 에서 정보 받아오지만 기본값 선언
+    let positions = {
+        "서울특별시": [0, 10, 50, "red"],
+        "인천광역시": [0, 0, 70, "blue"],
+        "대구광역시": [0, 0, 20, "green"],
+        "광주광역시": [-10, 10, 30, "yellow"],
+        "울산광역시": [0, 0, 14, "purple"],
+        "부산광역시": [-10, 10, 28, "cyan"],
+        "대전광역시": [0, 0, 65, "magenta"],
+        "세종특별자치시": [-10, 10, 84, "lime"],
+        "제주특별자치도": [0, 0, 15, "black"],
+        "강원도": [0, 0, 35, "gray"],
+        "충청북도": [10, -20, 16, "orange"],
+        "충청남도": [-20, -20, 75, "brown"],
+        "경상북도": [0, 0, 64, "pink"],
+        "경상남도": [0, 0, 22, "olive"],
+        "전라북도": [0, 0, 67, "teal"],
+        "전라남도": [20, 0, 84, "navy"],
+        "경기도": [20, 50, 24, "maroon"],
+    };
+    
+    let positions2 = {
+        "서울특별시": [0, 0, 50, "Chocolate"],
+        "인천광역시": [0, 0, 50, "Cornflowerblue"],
+        "대구광역시": [0, 0, 50, "Crimson"],
+        "광주광역시": [0, 0, 50, "Cornsilk"],
+        "울산광역시": [0, 0, 50, "Darksalmon"],
+        "부산광역시": [0, 0, 50, "Darkseagreen"],
+        "대전광역시": [0, 0, 50, "Darkturquoise"],
+        "세종특별자치시": [0, 0, 50, "Deeppink"],
+        "제주특별자치도": [0, 0, 50, "Gold"],
+        "강원도": [0, 0, 50, "Greenyellow"],
+        "충청북도": [0, 0, 50, "Goldenrod"],
+        "충청남도": [0, 0, 50, "Hotpink"],
+        "경상북도": [0, 0, 50, "Lightblue"],
+        "경상남도": [0, 0, 50, "Mediumspringgreen"],
+        "전라북도": [0, 0, 50, "Paleturquoise"],
+        "전라남도": [0, 0, 50, "Seagreen"],
+        "경기도": [0, 0, 50, "Steelblue"],
+    };
+
+// SVG 요소의 크기 설정
+const width = 1000;
+const height = 1000;
+
+const svg = d3.select("#map")
+    .attr("width", width)
+    .attr("height", height);
+
+// 지리적 투영법 설정 (Mercator 투영법 사용)
+const projection = d3.geoMercator()
+    .translate([width / 2, height / 2])
+    .fitSize([width, height], geojson); // 지도를 SVG 영역에 맞추는 설정 추가
+
+// 경로 생성기
+const path = d3.geoPath().projection(projection);
+const g = svg.append("g");
+
+// 줌 동작 생성
+const zoom = d3.zoom()
+    .scaleExtent([1, 8]) // 최소 및 최대 확대/축소 레벨 설정
+    .on("zoom", zoomed);
+
+// 줌 동작을 g 요소에 연결
+svg.call(zoom);
+
+// 각 지역의 클릭 상태를 추적하기 위한 객체
+const provinceClicked = {};
+
+// 줌 이벤트 처리 함수
+function zoomed(event) {
+    // 지도와 라벨에 변환 적용
+    g.attr("transform", event.transform);
+}
+
+// 로컬 파일에서 GeoJSON 데이터를 로드하여 지도를 그리기
+const map = g.selectAll(".province") // 지도를 그릴 때 'g' 요소 사용
+    .data(geojson.features)
+    .enter()
+    .append("g")
+    .attr("class", "province")
+    .append("path")
+    .attr("d", path)
+    .attr("stroke", "#fff")
+    .attr("stroke-width", "1")
+    .attr("fill", "#83b4d3")
+    .on("click", handleClick) // 클릭 이벤트 리스너 추가
+    .on("mouseup", handleMouseUp); // 우클릭 이벤트 리스너 추가
+
+// 지역구 이름 표시
+const labels = g.selectAll(".label") // 라벨을 그릴 때 'g' 요소 사용
+    .data(geojson.features)
+    .enter()
+    .append("text")
+    .attr("class", "province-title")
+    .attr("transform", function (d) {
+        // 지역 이름에 따른 위치를 positions에서 검색
+        const position = positions[d.properties.name] || [0, 0, 0];  // 만약 키가 없다면 기본 위치를 사용
+        // 검색된 위치를 사용하여 라벨의 위치를 조정
+        return "translate(" + [path.centroid(d)[0] + position[0], path.centroid(d)[1] + position[1]] + ")";
+    })
+    .attr("text-anchor", "middle")
+    .text(function (d) {
+    // 지역 이름을 표시할 적절한 속성 이름으로 변경
+        return d.properties.name;
+    });
+
+var textlength = 0;
+
+// 클릭 이벤트 처리 함수
+function handleClick(event, d) {
+    const province = d3.select(this.parentNode);
+    const provinceName = d.properties.name;
+
+    //labe을 이용해 객체를 찾음
+    var elements = document.getElementsByClassName("province-title");
+    for (var i = 0; i < elements.length; i++)  {
+
+        if (provinceName == elements[i].innerHTML)
+        {
+        var bb = elements[i].getBBox();
+        textlength = bb.width;
+        }
+    }
+
+    const isClicked = provinceClicked[provinceName];
+
+    const rectStartX = positions[provinceName][0];      //X값 조정 좌표
+    const rectStartY = positions[provinceName][1];      //Y값 조정 좌표
+    const rectHeight = positions[provinceName][2];      //막대높이
+    const rectHeight2 = positions2[provinceName][2];    //막대높이
+    const rectColor = positions[provinceName][3];       //막대색상
+    const rectColor2 = positions2[provinceName][3];     //막대색상
+    
+    // 이미 클릭된 지역인 경우, 사각형을 제거하고 상태를 갱신
+    if (isClicked) {
+        province.classed("clicked", false);
+        province.selectAll(".clicked-square").remove();
+        provinceClicked[provinceName] = false;
+        handleMouseUp();
+    } else {
+        // 클릭되지 않은 지역인 경우, 클릭된 클래스 추가하고 사각형 표시
+        province.classed("clicked", true);
+        const centroid = path.centroid(d);
+
+        //positions 막대 그리기
+        province.append("rect")
+        .attr("class", "clicked-square")
+        .attr("x", centroid[0] + rectStartX + (textlength / 2))     // label의 오른쪽에 위치
+        .attr("y", centroid[1] + rectStartY - rectHeight) // label과 같은 높이에 위치하도록
+        .attr("width", 30) //막대 가로길이를 설정합니다.
+        .attr("height", rectHeight) //막대 높이를 설정합니다.
+        .style("fill", rectColor); // 사각형 색상을 설정합니다.
+
+        //positions 옆 positions2 막대 그리기
+        province.append("rect")
+        .attr("class", "clicked-square")
+        .attr("x", centroid[0] + rectStartX + 33 + (textlength / 2)) // positions 막대 오른쪽에 위치 하도록 x값 +33
+        .attr("y", centroid[1] + rectStartY  - rectHeight2) // label과 같은 높이에 위치하도록
+        .attr("width", 30) //막대 가로길이를 설정합니다.
+        .attr("height", rectHeight2) //막대 높이를 설정합니다.
+        .style("fill", rectColor2); // 사각형 색상을 설정합니다.
+
+        provinceClicked[provinceName] = true;
+
+        // 클릭된 지역으로 줌
+        const bounds = path.bounds(d);
+        const dx = bounds[1][0] - bounds[0][0];
+        const dy = bounds[1][1] - bounds[0][1];
+        const x = (bounds[0][0] + bounds[1][0]) / 2;
+        const y = (bounds[0][1] + bounds[1][1]) / 2;
+        const scale = Math.max(1, Math.min(8, 0.9 / Math.max(dx / width, dy / height)));
+        const translate = [width / 2 - scale * x, height / 2 - scale * y];
+
+        svg.transition()
+        .duration(750)
+        .call(zoom.transform, d3.zoomIdentity.translate(translate[0], translate[1]).scale(scale));
+    }
+}
+
+// 우클릭 이벤트 처리 함수
+function handleMouseUp() {
+    // 우클릭 시 전체 지도가 보이도록 배율 초기화
+    svg.transition()
+    .duration(750)
+    .call(zoom.transform, d3.zoomIdentity);
+}
+
+function getPageDimensions() {
+    return {
+        width: document.documentElement.scrollWidth,
+        height: document.documentElement.scrollHeight
+    };
+}
+</script>
+</body>
+
+</html>
